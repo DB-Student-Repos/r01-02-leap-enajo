@@ -1,100 +1,165 @@
-fn process_leapyear_case(year: u64, expected: bool) {
-    assert_eq!(leap::is_leap_year(year), expected);
-}
+use circular_buffer::{CircularBuffer, Error};
+use std::rc::Rc;
 
 #[test]
-fn test_year_not_divisible_by_4_common_year() {
-    process_leapyear_case(2015, false);
-}
-
-#[test]
-#[ignore]
-fn test_year_divisible_by_2_not_divisible_by_4_in_common_year() {
-    process_leapyear_case(1970, false);
+fn error_on_read_empty_buffer() {
+    let mut buffer = CircularBuffer::<char>::new(1);
+    assert_eq!(Err(Error::EmptyBuffer), buffer.read());
 }
 
 #[test]
 #[ignore]
-fn test_year_divisible_by_4_not_divisible_by_100_leap_year() {
-    process_leapyear_case(1996, true);
+fn can_read_item_just_written() {
+    let mut buffer = CircularBuffer::new(1);
+    assert!(buffer.write('1').is_ok());
+    assert_eq!(Ok('1'), buffer.read());
 }
 
 #[test]
 #[ignore]
-fn test_year_divisible_by_4_and_5_is_still_a_leap_year() {
-    process_leapyear_case(1960, true);
+fn each_item_may_only_be_read_once() {
+    let mut buffer = CircularBuffer::new(1);
+    assert!(buffer.write('1').is_ok());
+    assert_eq!(Ok('1'), buffer.read());
+    assert_eq!(Err(Error::EmptyBuffer), buffer.read());
 }
 
 #[test]
 #[ignore]
-fn test_year_divisible_by_100_not_divisible_by_400_common_year() {
-    process_leapyear_case(2100, false);
+fn items_are_read_in_the_order_they_are_written() {
+    let mut buffer = CircularBuffer::new(2);
+    assert!(buffer.write('1').is_ok());
+    assert!(buffer.write('2').is_ok());
+    assert_eq!(Ok('1'), buffer.read());
+    assert_eq!(Ok('2'), buffer.read());
+    assert_eq!(Err(Error::EmptyBuffer), buffer.read());
 }
 
 #[test]
 #[ignore]
-fn test_year_divisible_by_100_but_not_by_3_is_still_not_a_leap_year() {
-    process_leapyear_case(1900, false);
+fn full_buffer_cant_be_written_to() {
+    let mut buffer = CircularBuffer::new(1);
+    assert!(buffer.write('1').is_ok());
+    assert_eq!(Err(Error::FullBuffer), buffer.write('2'));
 }
 
 #[test]
 #[ignore]
-fn test_year_divisible_by_400_leap_year() {
-    process_leapyear_case(2000, true);
+fn read_frees_up_capacity_for_another_write() {
+    let mut buffer = CircularBuffer::new(1);
+    assert!(buffer.write('1').is_ok());
+    assert_eq!(Ok('1'), buffer.read());
+    assert!(buffer.write('2').is_ok());
+    assert_eq!(Ok('2'), buffer.read());
 }
 
 #[test]
 #[ignore]
-fn test_year_divisible_by_400_but_not_by_125_is_still_a_leap_year() {
-    process_leapyear_case(2400, true);
+fn read_position_is_maintained_even_across_multiple_writes() {
+    let mut buffer = CircularBuffer::new(3);
+    assert!(buffer.write('1').is_ok());
+    assert!(buffer.write('2').is_ok());
+    assert_eq!(Ok('1'), buffer.read());
+    assert!(buffer.write('3').is_ok());
+    assert_eq!(Ok('2'), buffer.read());
+    assert_eq!(Ok('3'), buffer.read());
 }
 
 #[test]
 #[ignore]
-fn test_year_divisible_by_200_not_divisible_by_400_common_year() {
-    process_leapyear_case(1800, false);
+fn items_cleared_out_of_buffer_cant_be_read() {
+    let mut buffer = CircularBuffer::new(1);
+    assert!(buffer.write('1').is_ok());
+    buffer.clear();
+    assert_eq!(Err(Error::EmptyBuffer), buffer.read());
 }
 
 #[test]
 #[ignore]
-fn test_any_old_year() {
-    process_leapyear_case(1997, false);
+fn clear_frees_up_capacity_for_another_write() {
+    let mut buffer = CircularBuffer::new(1);
+    assert!(buffer.write('1').is_ok());
+    buffer.clear();
+    assert!(buffer.write('2').is_ok());
+    assert_eq!(Ok('2'), buffer.read());
 }
 
 #[test]
 #[ignore]
-fn test_early_years() {
-    process_leapyear_case(1, false);
-    process_leapyear_case(4, true);
-    process_leapyear_case(100, false);
-    process_leapyear_case(400, true);
-    process_leapyear_case(900, false);
+fn clear_does_nothing_on_empty_buffer() {
+    let mut buffer = CircularBuffer::new(1);
+    buffer.clear();
+    assert!(buffer.write('1').is_ok());
+    assert_eq!(Ok('1'), buffer.read());
 }
 
 #[test]
 #[ignore]
-fn test_century() {
-    process_leapyear_case(1700, false);
-    process_leapyear_case(1800, false);
-    process_leapyear_case(1900, false);
+fn clear_actually_frees_up_its_elements() {
+    let mut buffer = CircularBuffer::new(1);
+    let element = Rc::new(());
+    assert!(buffer.write(Rc::clone(&element)).is_ok());
+    assert_eq!(Rc::strong_count(&element), 2);
+    buffer.clear();
+    assert_eq!(Rc::strong_count(&element), 1);
 }
 
 #[test]
 #[ignore]
-fn test_exceptional_centuries() {
-    process_leapyear_case(1600, true);
-    process_leapyear_case(2000, true);
-    process_leapyear_case(2400, true);
+fn overwrite_acts_like_write_on_non_full_buffer() {
+    let mut buffer = CircularBuffer::new(2);
+    assert!(buffer.write('1').is_ok());
+    buffer.overwrite('2');
+    assert_eq!(Ok('1'), buffer.read());
+    assert_eq!(Ok('2'), buffer.read());
+    assert_eq!(Err(Error::EmptyBuffer), buffer.read());
 }
 
 #[test]
 #[ignore]
-fn test_years_1600_to_1699() {
-    let incorrect_years = (1600..1700)
-        .filter(|&year| leap::is_leap_year(year) != (year % 4 == 0))
-        .collect::<Vec<_>>();
+fn overwrite_replaces_the_oldest_item_on_full_buffer() {
+    let mut buffer = CircularBuffer::new(2);
+    assert!(buffer.write('1').is_ok());
+    assert!(buffer.write('2').is_ok());
+    buffer.overwrite('A');
+    assert_eq!(Ok('2'), buffer.read());
+    assert_eq!(Ok('A'), buffer.read());
+}
 
-    if !incorrect_years.is_empty() {
-        panic!("incorrect result for years: {incorrect_years:?}");
-    }
+#[test]
+#[ignore]
+fn overwrite_replaces_the_oldest_item_remaining_in_buffer_following_a_read() {
+    let mut buffer = CircularBuffer::new(3);
+    assert!(buffer.write('1').is_ok());
+    assert!(buffer.write('2').is_ok());
+    assert!(buffer.write('3').is_ok());
+    assert_eq!(Ok('1'), buffer.read());
+    assert!(buffer.write('4').is_ok());
+    buffer.overwrite('5');
+    assert_eq!(Ok('3'), buffer.read());
+    assert_eq!(Ok('4'), buffer.read());
+    assert_eq!(Ok('5'), buffer.read());
+}
+
+#[test]
+#[ignore]
+fn integer_buffer() {
+    let mut buffer = CircularBuffer::new(2);
+    assert!(buffer.write(1).is_ok());
+    assert!(buffer.write(2).is_ok());
+    assert_eq!(Ok(1), buffer.read());
+    assert!(buffer.write(-1).is_ok());
+    assert_eq!(Ok(2), buffer.read());
+    assert_eq!(Ok(-1), buffer.read());
+    assert_eq!(Err(Error::EmptyBuffer), buffer.read());
+}
+
+#[test]
+#[ignore]
+fn string_buffer() {
+    let mut buffer = CircularBuffer::new(2);
+    buffer.write("".to_string()).unwrap();
+    buffer.write("Testing".to_string()).unwrap();
+    assert_eq!(0, buffer.read().unwrap().len());
+    assert_eq!(Ok("Testing".to_string()), buffer.read());
 }
